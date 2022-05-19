@@ -1,0 +1,20 @@
+name: Validate Wheelhouse
+
+on:
+  workflow_call:
+  
+jobs:
+  validate-wheelhouse:
+    name: Validate Wheelhouse
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+    - name: Setup Python
+      uses: actions/setup-python@v2
+    - name: Install Dependencies
+      run: |
+        pip install tox
+        sudo snap install charm --classic
+    - name: Run validate-wheelhouse
+      run: tox -vve validate-wheelhouse
