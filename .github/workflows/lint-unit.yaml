@@ -2,6 +2,12 @@ name: Lint-Unit
 
 on:
   workflow_call:
+    inputs:
+      python:
+        description: 'Matrix of python versions formatted as a JSON array'
+        default: "['3.6', '3.7', '3.8', '3.9', '3.10']"
+        required: false
+        type: string
   
 jobs:
   lint-unit:
@@ -9,12 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python: 
-          - "3.6"
-          - "3.7"
-          - "3.8"
-          - "3.9"
-          - "3.10"
+        python: ${{ fromJson(inputs.python) }}
     steps:
       - name: Check out code
         uses: actions/checkout@v2
