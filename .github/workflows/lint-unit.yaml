@@ -8,6 +8,12 @@ on:
         default: "['3.6', '3.7', '3.8', '3.9', '3.10']"
         required: false
         type: string
+      working-directory:
+        description: 'Path to directory within repo where Lint and Unit should run'
+        default: './'
+        required: false
+        type: string
+
   
 jobs:
   lint-unit:
@@ -16,6 +22,9 @@ jobs:
     strategy:
       matrix:
         python: ${{ fromJson(inputs.python) }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
     steps:
       - name: Check out code
         uses: actions/checkout@v2
