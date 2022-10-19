@@ -2,11 +2,20 @@ name: Validate Wheelhouse
 
 on:
   workflow_call:
+    inputs:
+      series:
+        description: 'Matrix of ubuntu versions'
+        default: "['bionic', 'focal', 'jammy']"
+        required: false
+        type: string
   
 jobs:
   validate-wheelhouse:
     name: Validate Wheelhouse
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        series: ${{ fromJson(inputs.series) }}
+    runs-on: ubuntu-${{ matrix.series }}
     steps:
     - name: Check out code
       uses: actions/checkout@v2
