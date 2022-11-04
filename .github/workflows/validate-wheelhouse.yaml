@@ -3,26 +3,26 @@ name: Validate Wheelhouse
 on:
   workflow_call:
     inputs:
-      series:
-        description: 'Matrix of ubuntu versions'
-        default: "['18.04', '20.04', '22.04']"
+      python:
+        description: 'Matrix of python versions'
+        default: "['3.6', '3.8', '3.10']"
         required: false
         type: string
   
 jobs:
   validate-wheelhouse:
     name: Validate Wheelhouse
-    strategy:
+    version:
       matrix:
-        series: ${{ fromJson(inputs.series) }}
-    runs-on: ubuntu-${{ matrix.series }}
+        series: ${{ fromJson(inputs.python) }}
+    runs-on: ubuntu-latest
     steps:
     - name: Check out code
       uses: actions/checkout@v3
     - name: Setup Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.x'
+        python-version: ${{ matrix.python }}
     - name: Install Dependencies
       run: |
         pip install tox
