@@ -12,9 +12,9 @@ on:
 jobs:
   validate-wheelhouse:
     name: Validate Wheelhouse
-    version:
+    strategy:
       matrix:
-        series: ${{ fromJson(inputs.python) }}
+        python: ${{ fromJson(inputs.python) }}
     runs-on: ubuntu-latest
     steps:
     - name: Check out code
