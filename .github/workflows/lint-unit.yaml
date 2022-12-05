@@ -3,9 +3,14 @@ name: Lint-Unit
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: 'Which ubuntu series should be used for the runner'
+        default: "ubuntu-22.04"
+        required: false
+        type: string
       python:
         description: 'Matrix of python versions formatted as a JSON array'
-        default: "['3.6', '3.7', '3.8', '3.9', '3.10']"
+        default: "['3.7', '3.8', '3.9', '3.10', '3.11']"
         required: false
         type: string
       working-directory:
@@ -18,7 +23,7 @@ on:
 jobs:
   lint-unit:
     name: Lint and Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     strategy:
       matrix:
         python: ${{ fromJson(inputs.python) }}
