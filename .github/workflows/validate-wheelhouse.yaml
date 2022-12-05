@@ -3,9 +3,14 @@ name: Validate Wheelhouse
 on:
   workflow_call:
     inputs:
+      runs-on:
+        description: 'Which ubuntu series should be used for the runner'
+        default: "ubuntu-22.04"
+        required: false
+        type: string
       python:
         description: 'Matrix of python versions'
-        default: "['3.6', '3.8', '3.10']"
+        default: "['3.8', '3.10']"
         required: false
         type: string
   
@@ -15,7 +20,7 @@ jobs:
     strategy:
       matrix:
         python: ${{ fromJson(inputs.python) }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runs-on }}
     steps:
     - name: Check out code
       uses: actions/checkout@v3
