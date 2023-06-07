@@ -1,0 +1,87 @@
+name: Build with charmcraft
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'Ubuntu series to use as the builder'
+        default: "ubuntu-20.04"
+        required: false
+        type: string
+      lxd-channel:
+        description: |
+          snap channel for lxd, installed via snap
+        required: false
+        default: latest/stable
+      charmcraft-channel:
+        description: |
+          snap channel for charmcraft, installed via snap
+        required: false
+        default: latest/stable
+      project-dir:
+        description: |
+          Specify the project's directory
+        type: str
+        default: './'
+
+jobs:
+  charmcraft-pack:
+    name: Charmcraft Pack
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Initialize LXD
+        run: |
+          sudo apt-get remove -qy lxd lxd-client | true
+          sudo snap list lxd | true
+          sudo snap install lxd --channel=${{ inputs.lxd-channel }}
+          sudo snap refresh lxd --channel=${{ inputs.lxd-channel }}
+          sudo lxd waitready
+          sudo lxd init --auto
+          sudo chmod a+wr /var/snap/lxd/common/lxd/unix.socket
+          sudo lxc network set lxdbr0 ipv6.address none
+          sudo usermod -a -G lxd $USER
+          sg lxd -c 'lxc version'
+
+      - name: Remove Docker
+        run: |
+          # https://github.com/canonical/lxd-cloud/blob/f20a64a8af42485440dcbfd370faf14137d2f349/test/includes/lxd.sh#L13-L23
+          sudo rm -rf /etc/docker
+          sudo apt-get purge moby-buildx moby-engine moby-cli moby-compose moby-containerd moby-runc -y
+          sudo iptables -P FORWARD ACCEPT
+
+      - name: Initialize Charmcraft tools
+        run: |
+          sudo snap install yq
+          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+
+      - uses: actions/checkout@v3
+      - name: Set Charm Metadata
+        id: metadata
+        run: echo "NAME=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
+
+      - name: Pack Charm
+        run: |
+          sudo charmcraft pack -v --project-dir ${{ inputs.project-dir }}
+
+      - name: Setup Artifact Collection
+        if: ${{ failure() }}
+        run: mkdir tmp
+
+      - name: Collect Charmcraft Logs
+        if: ${{ failure() }}
+        run: |
+          cp /home/runner/.local/state/charmcraft/log/charmcraft-*.log tmp/ | true
+          sudo cp /root/.local/state/charmcraft/log/charmcraft-*.log tmp/ | true
+
+      - name: Upload charm artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.metadata.outputs.NAME }}
+          path: ./*.charm
+
+      - name: Upload debug artifacts
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-artifacts
+          path: tmp

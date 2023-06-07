@@ -1,0 +1,67 @@
+name: Build with charmcraft
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'Ubuntu series to use as the builder'
+        default: "ubuntu-20.04"
+        required: false
+        type: string
+      charmtools-channel:
+        description: |
+          snap channel for charm tools, installed via snap
+        required: false
+        default: 2.x/stable
+      layers-list:
+        required: false
+        type: str
+        default: 'https://raw.githubusercontent.com/charmed-kubernetes/jenkins/main/jobs/includes/charm-layer-list.inc'
+      layer-index:
+        description: |
+          URL of the reactive layer index
+        type: str
+        default: 'https://charmed-kubernetes.github.io/layer-index/'
+      layer-branch:
+        description: |
+          Branch of the reactive layer index
+        type: str
+        default: 'main'
+      project-dir:
+        description: |
+          Specify the project's directory
+        type: str
+        default: './'
+
+jobs:
+  charm-build:
+    name: Charm Build
+    runs-on: ${{ inputs.runs-on }}
+    steps:
+      - name: Initialize Charm tools
+        run: |
+          sudo snap install charm --channel ${{ inputs.charm-channel }} --classic
+          sudo snap install yq
+          sudo apt update
+          sudo apt install parallel -y
+
+      - uses: actions/checkout@v3
+
+      - name: Set Charm Metadata
+        id: metadata
+        run: echo "NAME=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch branch layers and build
+        run: |
+          mkdir -p cache/layers
+          mkdir -p cache/interfaces
+          export CHARM_LAYERS_DIR=cache/layers
+          export CHARM_INTERFACES_DIR=cache/interfaces
+          curl ${{ layers-list }} | yq '.[] | keys | .[0]' | parallel -j 4 charm pull-source -i ${{ inputs.layer-index }} -b ${{ inputs.layer-branch }} {}
+          charm build -r --force -i https://localhost --charm-file ${{ inputs.project-dir }}
+
+      - name: Upload charm artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ steps.metadata.outputs.NAME }}
+          path: ./*.charm
