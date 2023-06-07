@@ -13,16 +13,18 @@ on:
           snap channel for lxd, installed via snap
         required: false
         default: latest/stable
+        type: string
       charmcraft-channel:
         description: |
           snap channel for charmcraft, installed via snap
         required: false
         default: latest/stable
+        type: string
       project-dir:
         description: |
           Specify the project's directory
-        type: str
         default: './'
+        type: string
 
 jobs:
   charmcraft-pack:
@@ -55,13 +57,12 @@ jobs:
           sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
 
       - uses: actions/checkout@v3
-      - name: Set Charm Metadata
-        id: metadata
-        run: echo "NAME=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Pack Charm
+        id: metadata
         run: |
           sudo charmcraft pack -v --project-dir ${{ inputs.project-dir }}
+          echo "NAME=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Artifact Collection
         if: ${{ failure() }}
