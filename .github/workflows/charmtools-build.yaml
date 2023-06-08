@@ -33,6 +33,10 @@ on:
           Specify the project's directory
         default: './'
         type: string
+    outputs:
+      charm:
+        description: Name of the charm artifact
+        value: ${{ jobs.charm-build.outputs.charm-name }}
 
 jobs:
   charm-build:
@@ -42,6 +46,8 @@ jobs:
       CHARM_LAYERS_DIR: cache/layers
       CHARM_INTERFACES_DIR: cache/interfaces
       LAYER_BRANCH: ${{ inputs.layer-branch }}
+    outputs:
+      charm-name: ${{ steps.metadata.outputs.charm-name }}
     steps:
       - name: Initialize Charm tools
         run: |
@@ -60,10 +66,10 @@ jobs:
           export LAYER_BRANCH=${LAYER_BRANCH:-$GITHUB_REF_NAME}
           curl ${{ inputs.layers-list }} | yq '.[] | keys | .[0]' | grep -v 'layer:index' | parallel -j 4 charm pull-source -i ${{ inputs.layer-index }} -b ${LAYER_BRANCH} {}
           charm build -r --force -i https://localhost --charm-file ${{ inputs.project-dir }}
-          echo "NAME=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
+          echo "charm-name=$(yq '.name' metadata.yaml)" >> "$GITHUB_OUTPUT"
 
       - name: Upload charm artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ steps.metadata.outputs.NAME }}
+          name: ${{ steps.metadata.outputs.charm-name }}
           path: ./*.charm

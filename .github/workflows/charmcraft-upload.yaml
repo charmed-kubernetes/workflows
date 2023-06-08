@@ -1,0 +1,115 @@
+name: Upload with charmcraft
+
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: 'Ubuntu series to use as the builder'
+        default: "ubuntu-20.04"
+        required: false
+        type: string
+      charmcraft-channel:
+        description: |
+          snap channel for charmcraft, installed via snap
+        required: false
+        default: latest/stable
+        type: string
+      charm:
+        description: Name of the charm artifact
+        required: true
+        type: string
+      resources:
+        description: Name of charm resources artifact
+        required: false
+        default: ""
+        type: string
+      release-channels:
+        description: List of release channels
+        required: false
+        type: string
+        default: '["latest/edge"]'
+    secrets:
+      CHARMCRAFT_AUTH: 
+        required: true
+
+jobs:
+  charmcraft-upload-resource:
+    name: Charmcraft Resource Upload
+    runs-on: ${{ inputs.runs-on }}
+    env:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+      ARTIFACT_PATH: /tmp/artifact/
+    outputs:
+      resources: ${{ steps.resources.outputs.result }}
+    steps:
+      - run: mkdir -p ${ARTIFACT_PATH}
+
+      - name: Download charm artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.resources }}
+          path: ${{ env.ARTIFACT_PATH }}
+
+      - name: Initialize Charmcraft tools
+        run: |
+          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+          charmcraft whoami
+
+      - name: Upload resources to charmhub.io
+        id: resources
+        working-directory: ${{ env.ARTIFACT_PATH }}
+        run: |
+          resources=()
+          # read a list of objects with keys 'resource' and 'args' from spec in the artifact
+          readarray -t resource_list < <(jq --compact-output '.[]' charmcraft-upload.spec)
+
+          for item in "${resource_list[@]}"; do
+            resource=$(jq --raw-output '.resource' <<< "$item")
+            args=$(jq --raw-output '.args' <<< "$item")
+
+            echo ---
+            upload=$(charmcraft upload-resource --format=json ${{ inputs.charm }} $resource $args)
+
+            rev=$(jq --raw-output '.revision' <<< "$upload")
+            resources+=("$resource:$rev")
+          done
+
+          echo "result=$(jq -c -n '$ARGS.positional' --args "${resources[@]}")" >> "$GITHUB_OUTPUT"
+
+  charmcraft-upload:
+    name: Charmcraft Upload
+    needs: [charmcraft-upload-resource]
+    runs-on: ${{ inputs.runs-on }}
+    env:
+      CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+    steps:
+      - name: Download charm artifacts
+        uses: actions/download-artifact@v3
+        id: download
+        with:
+          name: ${{ inputs.charm }}
+
+      - name: Initialize Charmcraft tools
+        run: |
+          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+          charmcraft whoami
+
+      - name: Map Resources
+        id: resource-args
+        run: |
+          output=$(echo '${{ needs.charmcraft-upload-resource.outputs.resources }}' | jq -r 'map("--resource=" + .) | join(" ")')
+          echo "result=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Map Releases
+        id: release-args
+        run: |
+          output=$(echo '${{ inputs.release-channels }}' | jq -r 'map("--release=" + .) | join(" ")')
+          echo "result=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Upload charm
+        env:
+          RELEASES: ${{ steps.release-args.outputs.result }}
+          RESOURCES: ${{ steps.resource-args.outputs.result }}
+        working-directory: ${{ steps.download.outputs.download-path }}
+        run: |
+          charmcraft upload --format=json ./*.charm $RELEASES $RESOURCES
