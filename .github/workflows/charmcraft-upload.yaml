@@ -4,28 +4,27 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: 'Ubuntu series to use as the builder'
-        default: "ubuntu-20.04"
-        required: false
+        description: Description of the runner
+        default: ubuntu-20.04
         type: string
       charmcraft-channel:
-        description: |
-          snap channel for charmcraft, installed via snap
-        required: false
+        description: Snap channel for charmcraft
         default: latest/stable
         type: string
       charm:
-        description: Name of the charm artifact
+        description: Name of the Charm
         required: true
         type: string
+      arch:
+        description: Charm specific architecture (leave blank if multiarch)
+        type: string
+        default: ''
       resources:
         description: Name of charm resources artifact
-        required: false
         default: ""
         type: string
       release-channels:
         description: List of release channels
-        required: false
         type: string
         default: '["latest/edge"]'
     secrets:
@@ -33,18 +32,19 @@ on:
         required: true
 
 jobs:
-  charmcraft-upload-resource:
-    name: Charmcraft Resource Upload
+  charmcraft-upload-resources:
+    name: Charmcraft Upload Resources
     runs-on: ${{ inputs.runs-on }}
     env:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+      CHARMCRAFT_CHANNEL: ${{ inputs.charmcraft-channel }}
       ARTIFACT_PATH: /tmp/artifact/
     outputs:
       resources: ${{ steps.resources.outputs.result }}
     steps:
       - run: mkdir -p ${ARTIFACT_PATH}
 
-      - name: Download charm artifacts
+      - name: Download Charm Resources
         uses: actions/download-artifact@v3
         with:
           name: ${{ inputs.resources }}
@@ -52,7 +52,7 @@ jobs:
 
       - name: Initialize Charmcraft tools
         run: |
-          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+          sudo snap install charmcraft --channel $CHARMCRAFT_CHANNEL --classic
           charmcraft whoami
 
       - name: Upload resources to charmhub.io
@@ -60,44 +60,70 @@ jobs:
         working-directory: ${{ env.ARTIFACT_PATH }}
         run: |
           resources=()
-          # read a list of objects with keys 'resource' and 'args' from spec in the artifact
+          # read a list of objects with keys 'resource', 'revision', and 'args' from the 
+          # spec file located in the artifact
+          #    resource (required): the name of the resource
+          #    revision (optional): an existing charmhub resource revision
+          #    image (optional): a tar archive loaded by docker load
+          #    args (required if revision missing): 
+          #      command line arguments for uploading out of the artifact
+          #      example)
+          #        "--filepath=<path/in/archive>"
+          #        "--image=sha256:<image-identifier>" -- the image must be present locally
+
           readarray -t resource_list < <(jq --compact-output '.[]' charmcraft-upload.spec)
 
           for item in "${resource_list[@]}"; do
             resource=$(jq --raw-output '.resource' <<< "$item")
-            args=$(jq --raw-output '.args' <<< "$item")
+            revision=$(jq --raw-output '.revision//""' <<< "$item")
+            image=$(jq --raw-output '.image//""' <<< "$item")
+            upload_args=$(jq --raw-output '.args//""' <<< "$item")
+            
+            if [ -n "$image" ]; then
+              docker load < $image
+            fi
 
-            echo ---
-            upload=$(charmcraft upload-resource --format=json ${{ inputs.charm }} $resource $args)
+            if [ -n "$revision" ]; then
+              echo --- Using $resource revision $revision ---
+            elif [ -n "$upload_args" ]; then
+              echo --- Uploading $resource with $upload_args ---
+              upload=$(charmcraft upload-resource --format=json ${{ inputs.charm }} $resource $upload_args)
+              revision=$(jq --raw-output '.revision' <<< "$upload")
+            else
+              echo "--- $resource didn't specify .revision or .args ---" >&2
+              echo "    $item" >&2
+              exit 1;
+            fi
 
-            rev=$(jq --raw-output '.revision' <<< "$upload")
-            resources+=("$resource:$rev")
+            resources+=("$resource:$revision")
           done
 
           echo "result=$(jq -c -n '$ARGS.positional' --args "${resources[@]}")" >> "$GITHUB_OUTPUT"
 
   charmcraft-upload:
     name: Charmcraft Upload
-    needs: [charmcraft-upload-resource]
+    needs: [charmcraft-upload-resources]
     runs-on: ${{ inputs.runs-on }}
     env:
       CHARMCRAFT_AUTH: ${{ secrets.CHARMCRAFT_AUTH }}
+      CHARMCRAFT_CHANNEL: ${{ inputs.charmcraft-channel }}
+      CHARM_NAME: ${{ inputs.charm }}
     steps:
       - name: Download charm artifacts
         uses: actions/download-artifact@v3
         id: download
         with:
-          name: ${{ inputs.charm }}
+          name: ${{ env.CHARM_NAME }}
 
       - name: Initialize Charmcraft tools
         run: |
-          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+          sudo snap install charmcraft --channel $CHARMCRAFT_CHANNEL --classic
           charmcraft whoami
 
       - name: Map Resources
         id: resource-args
         run: |
-          output=$(echo '${{ needs.charmcraft-upload-resource.outputs.resources }}' | jq -r 'map("--resource=" + .) | join(" ")')
+          output=$(echo '${{ needs.charmcraft-upload-resources.outputs.resources }}' | jq -r 'map("--resource=" + .) | join(" ")')
           echo "result=$output" >> "$GITHUB_OUTPUT"
 
       - name: Map Releases
@@ -112,4 +138,5 @@ jobs:
           RESOURCES: ${{ steps.resource-args.outputs.result }}
         working-directory: ${{ steps.download.outputs.download-path }}
         run: |
-          charmcraft upload --format=json ./*.charm $RELEASES $RESOURCES
+          FILE_PATTERN="./$CHARM_NAME*${{ inputs.arch }}.charm"
+          charmcraft upload --format=json $FILE_PATTERN $RELEASES $RESOURCES

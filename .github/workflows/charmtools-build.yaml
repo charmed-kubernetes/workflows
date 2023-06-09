@@ -4,38 +4,31 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: 'Ubuntu series to use as the builder'
-        default: "ubuntu-20.04"
-        required: false
+        description: Description of the runner
+        default: ubuntu-20.04
         type: string
       charmtools-channel:
-        description: |
-          snap channel for charm tools, installed via snap
-        required: false
+        description: Snap channel for charm tools
         default: 2.x/stable
         type: string
       layers-list:
-        required: false
-        default: 'https://raw.githubusercontent.com/charmed-kubernetes/jenkins/main/jobs/includes/charm-layer-list.inc'
+        default: https://raw.githubusercontent.com/charmed-kubernetes/jenkins/main/jobs/includes/charm-layer-list.inc
         type: string
       layer-index:
-        description: |
-          URL of the reactive layer index
-        default: 'https://charmed-kubernetes.github.io/layer-index/'
+        description: URL of the reactive layer index
+        default: https://charmed-kubernetes.github.io/layer-index/
         type: string
       layer-branch:
-        description: |
-          Branch of the reactive layer index
+        description: Override reactive layer branch (defaults to GITHUB_REF_NAME)
         default: ''
         type: string
       project-dir:
-        description: |
-          Specify the project's directory
+        description: Specify the project's directory
         default: './'
         type: string
     outputs:
       charm:
-        description: Name of the charm artifact
+        description: Name of the Charm
         value: ${{ jobs.charm-build.outputs.charm-name }}
 
 jobs:

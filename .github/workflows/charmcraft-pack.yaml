@@ -4,36 +4,32 @@ on:
   workflow_call:
     inputs:
       runs-on:
-        description: 'Ubuntu series to use as the builder'
-        default: "ubuntu-20.04"
-        required: false
+        description: Description of the runner
+        default: ubuntu-20.04
         type: string
       lxd-channel:
-        description: |
-          snap channel for lxd, installed via snap
-        required: false
+        description: Snap channel for lxd
         default: latest/stable
         type: string
       charmcraft-channel:
-        description: |
-          snap channel for charmcraft, installed via snap
-        required: false
+        description: Snap channel for charmcraft
         default: latest/stable
         type: string
       project-dir:
-        description: |
-          Specify the project's directory
+        description: Specify the project's directory
         default: './'
         type: string
     outputs:
       charm:
-        description: Name of the charm artifact
+        description: Name of the Charm
         value: ${{ jobs.charmcraft-pack.outputs.charm-name }}
 
 jobs:
   charmcraft-pack:
     name: Charmcraft Pack
     runs-on: ${{ inputs.runs-on }}
+    env:
+      CHARMCRAFT_CHANNEL: ${{ inputs.charmcraft-channel }}
     outputs:
       charm-name: ${{ steps.metadata.outputs.charm-name }}
     steps:
@@ -60,7 +56,7 @@ jobs:
       - name: Initialize Charmcraft tools
         run: |
           sudo snap install yq
-          sudo snap install charmcraft --channel ${{ inputs.charmcraft-channel }} --classic
+          sudo snap install charmcraft --channel $CHARMCRAFT_CHANNEL --classic
 
       - uses: actions/checkout@v3
 
