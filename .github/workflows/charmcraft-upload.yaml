@@ -139,4 +139,14 @@ jobs:
         working-directory: ${{ steps.download.outputs.download-path }}
         run: |
           FILE_PATTERN="./$CHARM_NAME*${{ inputs.arch }}.charm"
-          charmcraft upload --format=json $FILE_PATTERN $RELEASES $RESOURCES
+          REVISION=""
+          if output=$(charmcraft upload --format=json $FILE_PATTERN $RELEASES $RESOURCES) ; then
+            echo $output
+          else
+            REVISION=$(jq '.errors[].message | capture(".*existing package is: (?<rev>[0-9]+)")' <<< "$output")
+          fi
+
+          if [ -z "$REVISION" ]; then
+            REVISION="--revision $REVISION"
+            charmcraft release --format=json $CHARM_NAME $REVISION $RELEASES $RESOURCES
+          fi
