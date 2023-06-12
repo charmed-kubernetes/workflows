@@ -60,27 +60,27 @@ jobs:
         working-directory: ${{ env.ARTIFACT_PATH }}
         run: |
           resources=()
-          # read a list of objects with keys 'resource', 'revision', and 'args' from the 
-          # spec file located in the artifact
+          # read a list of objects from the charmcraft-upload.spec in the artifact
+          # Schema:
           #    resource (required): the name of the resource
           #    revision (optional): an existing charmhub resource revision
-          #    image (optional): a tar archive loaded by docker load
-          #    args (required if revision missing): 
-          #      command line arguments for uploading out of the artifact
-          #      example)
-          #        "--filepath=<path/in/archive>"
-          #        "--image=sha256:<image-identifier>" -- the image must be present locally
-
-          readarray -t resource_list < <(jq --compact-output '.[]' charmcraft-upload.spec)
+          #    filepath (optional): a filepath resource
+          #    image    (optional): an image resource tar archive from docker save
+          upload_spec=$(jq --compact-output '.[]' charmcraft-upload.spec)
+          readarray -t resource_list <<< "$upload_spec"
 
           for item in "${resource_list[@]}"; do
             resource=$(jq --raw-output '.resource' <<< "$item")
             revision=$(jq --raw-output '.revision//""' <<< "$item")
             image=$(jq --raw-output '.image//""' <<< "$item")
-            upload_args=$(jq --raw-output '.args//""' <<< "$item")
+            filepath=$(jq --raw-output '.filepath//""' <<< "$item")
             
             if [ -n "$image" ]; then
+              docker rmi $(docker images -a -q)
               docker load < $image
+              upload_args="--image=$(docker images -a --format '{{.ID}}')"
+            elif [ -n "$filepath" ]; then
+              upload_args="--filepath=$filepath"
             fi
 
             if [ -n "$revision" ]; then
@@ -90,7 +90,7 @@ jobs:
               upload=$(charmcraft upload-resource --format=json ${{ inputs.charm }} $resource $upload_args)
               revision=$(jq --raw-output '.revision' <<< "$upload")
             else
-              echo "--- $resource didn't specify .revision or .args ---" >&2
+              echo "--- $resource didn't specify .revision or .image or .filepath ---" >&2
               echo "    $item" >&2
               exit 1;
             fi
