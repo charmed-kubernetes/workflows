@@ -98,7 +98,8 @@ jobs:
             resources+=("$resource:$revision")
           done
 
-          echo "result=$(jq -c -n '$ARGS.positional' --args "${resources[@]}")" >> "$GITHUB_OUTPUT"
+          resources_json=$(jq -c -n '$ARGS.positional' --args "${resources[@]}")
+          echo "result=$resources_json" >> "$GITHUB_OUTPUT"
 
   charmcraft-upload:
     name: Charmcraft Upload
@@ -146,7 +147,7 @@ jobs:
             REVISION=$(jq '.errors[].message | capture(".*existing package is: (?<rev>[0-9]+)")' <<< "$output")
           fi
 
-          if [ -z "$REVISION" ]; then
+          if [ ! -z "$REVISION" ]; then
             REVISION="--revision $REVISION"
             charmcraft release --format=json $CHARM_NAME $REVISION $RELEASES $RESOURCES
           fi

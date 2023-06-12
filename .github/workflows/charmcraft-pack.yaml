@@ -70,6 +70,11 @@ jobs:
           output=$(echo '${{ inputs.bases-indicies }}' | jq -r 'map("--bases-index=" + .) | join(" ")')
           echo "result=$output" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve charm version
+        working-directory: ${{ inputs.project-dir }}
+        run: |
+          cat version || git rev-parse --short HEAD | tee version
+
       - name: Pack Charm
         id: metadata
         run: |
