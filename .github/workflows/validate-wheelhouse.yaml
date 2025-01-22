@@ -5,14 +5,19 @@ on:
     inputs:
       runs-on:
         description: 'Which ubuntu series should be used for the runner'
-        default: "ubuntu-22.04"
+        default: "ubuntu-24.04"
         required: false
         type: string
       python:
         description: 'Matrix of python versions'
-        default: "['3.8', '3.10']"
+        default: "['3.8', '3.10', '3.12']"
         required: false
         type: string
+      with-uv:
+        description: 'Whether to run with tox-uv'
+        default: false
+        required: false
+        type: boolean
         
 jobs:
   validate-wheelhouse:
@@ -24,13 +29,30 @@ jobs:
     steps:
     - name: Check out code
       uses: actions/checkout@v4
+
+    # Setup using Python
     - name: Setup Python
       uses: actions/setup-python@v5
+      if: ${{ inputs.with-uv == false }}
       with:
         python-version: ${{ matrix.python }}
-    - name: Install Dependencies
+    - name: Install Tox
+      if: ${{ inputs.with-uv == false }}
       run: |
         pip install tox
         sudo snap install charm --classic
+
+    # Setup using UV
+    - name: Setup Astral UV
+      uses: astral-sh/setup-uv@v5
+      if: ${{ inputs.with-uv == true }}
+      with:
+        python-version: ${{ matrix.python }}
+    - name: Install tox with UV
+      if: ${{ inputs.with-uv == true }}
+      run: |
+        uv tool install tox --with tox-uv
+        sudo snap install charm --classic
+
     - name: Run validate-wheelhouse
       run: tox -vve validate-wheelhouse
